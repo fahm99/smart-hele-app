@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "576999197569",
+    "project_id": "ssh-me12",
+    "storage_bucket": "ssh-me12.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:576999197569:android:3dcdf2c94bb6026c78b680",
+        "android_client_info": {
+          "package_name": "com.example.ssh_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCUka_9odLGIKtnUHb7e-SqrbY6k2cSYM4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
