@@ -198,7 +198,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                             ),
                           ),
                           const SizedBox(height: 12),
-                          _buildMap(sensorData),
+                          _buildMap(sensorData, bluetoothProvider.isConnected),
                         ],
                       ),
                     ),
@@ -253,15 +253,158 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     );
   }
 
-  Widget _buildMap(SensorDataModel? sensorData) {
-    final double lat = sensorData?.latitude ?? AppConstants.defaultLatitude;
-    final double lng = sensorData?.longitude ?? AppConstants.defaultLongitude;
+  Widget _buildMap(SensorDataModel? sensorData, bool isHelmetConnected) {
+    // إذا كانت الخوذة غير متصلة، لا نعرض أي بيانات خريطة
+    if (!isHelmetConnected) {
+      return _buildDisconnectedMapPlaceholder();
+    }
+
+    // إذا كانت الخوذة متصلة لكن لا توجد بيانات، نعرض موقع افتراضي
+    if (sensorData == null || sensorData.latitude == 0.0 || sensorData.longitude == 0.0) {
+      return _buildDefaultMap();
+    }
+
+    // نعرض الخريطة ببيانات GPS الحقيقية من الخوذة
+    return _buildLiveMap(sensorData);
+  }
+
+  /// عرض رسالة عند عدم اتصال الخوذة
+  Widget _buildDisconnectedMapPlaceholder() {
+    return Container(
+      height: 220,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade800,
+        borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+        border: Border.all(
+          color: Colors.red.shade300,
+          width: 2,
+        ),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.wifi_off,
+              color: Colors.red.shade300,
+              size: 48,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'لا توجد بيانات - الخوذة غير متصلة',
+              style: TextStyle(
+                color: Colors.red.shade300,
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'يرجى الاتصال بالخوذة الذكية',
+              style: TextStyle(
+                color: Colors.grey.shade400,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// خريطة افتراضية عند عدم توفر بيانات GPS
+  Widget _buildDefaultMap() {
+    final double lat = AppConstants.defaultLatitude;
+    final double lng = AppConstants.defaultLongitude;
 
     return Container(
       height: 220,
-      child: GoogleMap(
-        initialCameraPosition:
-            CameraPosition(target: LatLng(lat, lng), zoom: 15),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade800,
+        borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+        child: GoogleMap(
+          initialCameraPosition:
+              CameraPosition(target: LatLng(lat, lng), zoom: 15),
+        ),
+      ),
+    );
+  }
+
+  /// خريطة حية ببيانات GPS من الخوذة
+  Widget _buildLiveMap(SensorDataModel sensorData) {
+    final double lat = sensorData.latitude;
+    final double lng = sensorData.longitude;
+
+    return Container(
+      height: 220,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+        border: Border.all(
+          color: AppColors.success,
+          width: 2,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+        child: Stack(
+          children: [
+            GoogleMap(
+              initialCameraPosition:
+                  CameraPosition(target: LatLng(lat, lng), zoom: 16),
+              onMapCreated: (controller) {
+                _mapController = controller;
+              },
+              markers: {
+                Marker(
+                  markerId: const MarkerId('helmet_location'),
+                  position: LatLng(lat, lng),
+                  icon: BitmapDescriptor.defaultMarkerWithHue(
+                    BitmapDescriptor.hueGreen,
+                  ),
+                  infoWindow: InfoWindow(
+                    title: 'موقع الخوذة',
+                    snippet: 'إحداثيات: ${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)}',
+                  ),
+                ),
+              },
+            ),
+            // مؤشر الحالة الحية
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.success,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.circle,
+                      color: Colors.white,
+                      size: 8,
+                    ),
+                    SizedBox(width: 4),
+                    Text(
+                      'LIVE',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

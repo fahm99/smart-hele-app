@@ -63,6 +63,7 @@ class BluetoothProvider extends ChangeNotifier {
       if (state == BluetoothAdapterState.off) {
         _isConnected = false;
         _connectedDevice = null;
+        _latestData = null; // مسح البيانات عند إيقاف البلوتوث
       }
       notifyListeners();
     });
@@ -190,6 +191,29 @@ class BluetoothProvider extends ChangeNotifier {
       // Listen to connection state
       _connectionSubscription = device.connectionState.listen((state) {
         _isConnected = state == BluetoothConnectionState.connected;
+        
+        // عند انقطاع الاتصال، نمسح البيانات الأخيرة
+        if (!_isConnected) {
+          _latestData = null;
+          _dataStreamController.add(
+            SensorDataModel(
+              userId: _deviceInfo?.userId ?? 'unknown',
+              heartRate: 0,
+              temperature: 0.0,
+              humidity: 0.0,
+              latitude: 0.0,
+              longitude: 0.0,
+              accX: 0.0,
+              accY: 0.0,
+              accZ: 0.0,
+              shockDetected: false,
+              shockValue: 0,
+              batteryLevel: 0,
+              timestamp: DateTime.now(),
+            ),
+          );
+        }
+        
         notifyListeners();
 
         if (!_isConnected && _lastDeviceId != null) {
@@ -301,6 +325,9 @@ class BluetoothProvider extends ChangeNotifier {
         await _connectedDevice!.disconnect();
       }
 
+      // مسح بيانات الحساسات عند قطع الاتصال
+      _latestData = null;
+      
       _connectedDevice = null;
       _isConnected = false;
       _deviceInfo = null;
