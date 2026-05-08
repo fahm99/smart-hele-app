@@ -26,6 +26,7 @@ class UserHomeScreen extends StatefulWidget {
 class _UserHomeScreenState extends State<UserHomeScreen> {
   GoogleMapController? _mapController;
   StreamSubscription<SensorDataModel>? _dataSubscription;
+  StreamSubscription<List<dynamic>>? _scanSubscription;
 
   bool _isConnecting = false; // 🔥 مهم
 
@@ -54,10 +55,11 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     // 🔥 بدء البحث
     await FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
 
-    FlutterBluePlus.scanResults.listen((results) async {
+    _scanSubscription = FlutterBluePlus.scanResults.listen((results) async {
       for (var r in results) {
         // ⚠️ غيري الاسم إذا جهازك مختلف
-        if (!_isConnecting && r.device.advName.contains("SSH-Helmet")) {
+        final advName = (r.device.advName ?? '');
+        if (!_isConnecting && advName.contains("SSH-Helmet")) {
           _isConnecting = true;
 
           try {
@@ -82,6 +84,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
   void dispose() {
     _mapController?.dispose();
     _dataSubscription?.cancel();
+    _scanSubscription?.cancel();
     super.dispose();
   }
 
@@ -93,7 +96,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     final l10n = AppLocalizations.of(context);
 
     double safetyValue = 1.0;
-    String statusText = l10n.safe ?? 'SAFE';
+    String statusText = l10n.safe;
     if (sensorData != null) {
       if (sensorData.fallDetected || sensorData.shockDetected) {
         safetyValue = 0.2;
@@ -127,7 +130,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                       child: SafetyGauge(
                         value: safetyValue,
                         status: statusText,
-                        label: l10n.safetyStatus ?? 'Helmet Condition',
+                        label: l10n.safetyStatus,
                       ),
                     ),
                   ),
@@ -190,7 +193,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            l10n.location ?? 'Live Location',
+                            l10n.location,
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -231,7 +234,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'SSH ${l10n.dashboard ?? "Dashboard"}',
+                'SSH ${l10n.dashboard}',
                 style: const TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.w900,
@@ -257,13 +260,79 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     final double lat = sensorData?.latitude ?? AppConstants.defaultLatitude;
     final double lng = sensorData?.longitude ?? AppConstants.defaultLongitude;
 
-    return Container(
-      height: 220,
-      child: GoogleMap(
-        initialCameraPosition:
-            CameraPosition(target: LatLng(lat, lng), zoom: 15),
-      ),
-    );
+    // If Google Maps API key is not provided, show a safe fallback UI
+    if (AppConstants.googleMapsApiKey.isEmpty) {
+      return Container(
+        height: 220,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.black26,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.location_on, size: 48, color: Colors.white70),
+              const SizedBox(height: 8),
+              Text(
+                'GPS: ${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)}',
+                style: const TextStyle(color: Colors.white70),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Live location from helmet sensor',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Try to create the GoogleMap widget, but guard against platform/map errors.
+    try {
+      return Container(
+        height: 220,
+        child: GoogleMap(
+          initialCameraPosition: CameraPosition(
+              target: LatLng(lat, lng), zoom: AppConstants.defaultZoom),
+        ),
+      );
+    } catch (e) {
+      // If GoogleMap fails (e.g., missing API key on release), show fallback
+      debugPrint('GoogleMap creation failed: $e');
+      return Container(
+        height: 220,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.black26,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.location_off, size: 48, color: Colors.white70),
+              const SizedBox(height: 8),
+              Text(
+                'Lat: ${lat.toStringAsFixed(6)}',
+                style: const TextStyle(color: Colors.white70),
+              ),
+              Text(
+                'Lng: ${lng.toStringAsFixed(6)}',
+                style: const TextStyle(color: Colors.white70),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Map unavailable — using helmet GPS data',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
   }
 
   Widget _buildEmergencyButton(AppLocalizations l10n) {

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Model representing sensor data from the smart helmet
@@ -68,39 +69,83 @@ class SensorDataModel {
 
   /// Create from JSON (from ESP32 via Bluetooth)
   factory SensorDataModel.fromJson(Map<String, dynamic> json, String userId) {
-    return SensorDataModel(
-      userId: userId,
-      deviceId: json['device_id'] as String?,
-      // Heart Rate - يدعم كلا التنسيقين
-      heartRate: json['heart'] ?? json['heart_rate'] ?? 0,
-      spo2: json['spo2'],
-      // Temperature & Humidity - يدعم كلا التنسيقين
-      temperature: (json['temp'] ?? json['temperature'] ?? 0.0).toDouble(),
-      humidity: (json['hum'] ?? json['humidity'] ?? 0.0).toDouble(),
-      // GPS
-      latitude: (json['lat'] ?? 0.0).toDouble(),
-      longitude: (json['lng'] ?? 0.0).toDouble(),
-      altitude: json['alt'] ?? json['altitude']?.toDouble(),
-      speed: json['speed']?.toDouble(),
-      // Accelerometer - يدعم كلا التنسيقين
-      accX: (json['ax'] ?? json['acc_x'] ?? 0.0).toDouble(),
-      accY: (json['ay'] ?? json['acc_y'] ?? 0.0).toDouble(),
-      accZ: (json['az'] ?? json['acc_z'] ?? 0.0).toDouble(),
-      // Gyroscope - يدعم كلا التنسيقين
-      gyroX: json['gx'] ?? json['gyro_x']?.toDouble(),
-      gyroY: json['gy'] ?? json['gyro_y']?.toDouble(),
-      gyroZ: json['gz'] ?? json['gyro_z']?.toDouble(),
-      // Shock - يدعم عدة تنسيقات
-      shockDetected: json['shock'] == true ||
-          json['shock'] == 1 ||
-          json['shock_detected'] == true,
-      shockValue: json['shock_val'] ?? json['shock_value'] ?? 0,
-      // Battery
-      batteryLevel: json['battery'] ?? 0,
-      // Fall - يدعم كلا التنسيقين
-      fallDetected: json['fall'] == true || json['fall_detected'] == true,
-      timestamp: DateTime.now(),
-    );
+    double _toDouble(dynamic v) {
+      if (v == null) return 0.0;
+      if (v is num) return v.toDouble();
+      if (v is String) return double.tryParse(v) ?? 0.0;
+      return 0.0;
+    }
+
+    int _toInt(dynamic v) {
+      if (v == null) return 0;
+      if (v is int) return v;
+      if (v is double) return v.toInt();
+      if (v is String)
+        return int.tryParse(v) ?? (double.tryParse(v)?.toInt() ?? 0);
+      return 0;
+    }
+
+    bool _toBool(dynamic v) {
+      if (v == null) return false;
+      if (v is bool) return v;
+      if (v is num) return v != 0;
+      if (v is String) {
+        final lower = v.toLowerCase();
+        return lower == 'true' || lower == '1';
+      }
+      return false;
+    }
+
+    try {
+      return SensorDataModel(
+        userId: userId,
+        deviceId: json['device_id'] as String?,
+        heartRate: _toInt(json['heart'] ?? json['heart_rate']),
+        spo2: _toInt(json['spo2']),
+        temperature: _toDouble(json['temp'] ?? json['temperature']),
+        humidity: _toDouble(json['hum'] ?? json['humidity']),
+        latitude: _toDouble(json['lat'] ?? json['latitude'] ?? json['lng']),
+        longitude: _toDouble(json['lng'] ?? json['longitude'] ?? json['lat']),
+        altitude: json['alt'] != null
+            ? _toDouble(json['alt'])
+            : (json['altitude'] != null ? _toDouble(json['altitude']) : null),
+        speed: json['speed'] != null ? _toDouble(json['speed']) : null,
+        accX: _toDouble(json['ax'] ?? json['acc_x']),
+        accY: _toDouble(json['ay'] ?? json['acc_y']),
+        accZ: _toDouble(json['az'] ?? json['acc_z']),
+        gyroX: json['gx'] != null
+            ? _toDouble(json['gx'])
+            : (json['gyro_x'] != null ? _toDouble(json['gyro_x']) : null),
+        gyroY: json['gy'] != null
+            ? _toDouble(json['gy'])
+            : (json['gyro_y'] != null ? _toDouble(json['gyro_y']) : null),
+        gyroZ: json['gz'] != null
+            ? _toDouble(json['gz'])
+            : (json['gyro_z'] != null ? _toDouble(json['gyro_z']) : null),
+        shockDetected: _toBool(json['shock'] ?? json['shock_detected']),
+        shockValue: _toInt(json['shock_val'] ?? json['shock_value']),
+        batteryLevel: _toInt(json['battery'] ?? json['battery_level']),
+        fallDetected: _toBool(json['fall'] ?? json['fall_detected']),
+        timestamp: DateTime.now(),
+      );
+    } catch (e) {
+      // Fallback minimal model in case of parse errors
+      return SensorDataModel(
+        userId: userId,
+        heartRate: 0,
+        temperature: 0.0,
+        humidity: 0.0,
+        latitude: 0.0,
+        longitude: 0.0,
+        accX: 0.0,
+        accY: 0.0,
+        accZ: 0.0,
+        shockDetected: false,
+        shockValue: 0,
+        batteryLevel: 0,
+        timestamp: DateTime.now(),
+      );
+    }
   }
 
   /// Convert to JSON
@@ -188,7 +233,7 @@ class SensorDataModel {
 
   /// Get acceleration magnitude
   double get accelerationMagnitude {
-    return (accX * accX + accY * accY + accZ * accZ).sqrt;
+    return math.sqrt(accX * accX + accY * accY + accZ * accZ);
   }
 
   /// Check if heart rate is in normal range
@@ -210,15 +255,4 @@ class SensorDataModel {
   }
 }
 
-extension on double {
-  double get sqrt => this <= 0 ? 0 : _sqrt(this);
-  double _sqrt(double x) {
-    double z = x;
-    double root = 0.0;
-    while (z * z <= x) {
-      root = z;
-      z += 0.001;
-    }
-    return root;
-  }
-}
+// No custom sqrt extension needed; use dart:math sqrt above.

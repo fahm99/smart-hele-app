@@ -38,16 +38,8 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     );
 
     if (success && mounted) {
-      if (true) {
-        context.go('/admin-home');
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('هذا الحساب ليس حساب ف'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
+      // Successful login — navigate to admin home.
+      context.go('/admin-home');
     } else if (mounted && authProvider.error != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

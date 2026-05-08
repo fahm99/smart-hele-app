@@ -1,14 +1,17 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
+
+import '../core/utils/platform.dart' as platform;
 
 import '../core/constants/app_constants.dart';
 import '../models/device_model.dart';
 import '../models/sensor_data_model.dart';
-import '../services/notification_service.dart';
 
 /// Provider for managing Bluetooth connectivity with ESP32
 class BluetoothProvider extends ChangeNotifier {
@@ -23,6 +26,7 @@ class BluetoothProvider extends ChangeNotifier {
   BluetoothDevice? _connectedDevice;
   List<BluetoothDevice> _scannedDevices = [];
   DeviceModel? _deviceInfo;
+  String? _userId;
 
   // Data stream
   SensorDataModel? _latestData;
@@ -38,6 +42,17 @@ class BluetoothProvider extends ChangeNotifier {
   // Reconnect timer
   Timer? _reconnectTimer;
   String? _lastDeviceId;
+  DateTime? _lastNotifyTime;
+
+  void _safeNotifyListeners() {
+    // SchedulerBinding.instance is non-null; check the scheduler phase only.
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      Future.microtask(() => notifyListeners());
+    } else {
+      notifyListeners();
+    }
+  }
 
   // Getters
   BluetoothAdapterState get adapterState => _adapterState;
@@ -50,7 +65,17 @@ class BluetoothProvider extends ChangeNotifier {
   DeviceModel? get deviceInfo => _deviceInfo;
   SensorDataModel? get latestData => _latestData;
   Stream<SensorDataModel> get dataStream => _dataStreamController.stream;
+  String? get currentUserId => _userId;
   bool get isBluetoothEnabled => _adapterState == BluetoothAdapterState.on;
+
+  /// Set authenticated user id for received sensor data
+  void setUserId(String userId) {
+    _userId = userId;
+    if (_deviceInfo != null) {
+      _deviceInfo = _deviceInfo!.copyWith(userId: userId);
+    }
+    _safeNotifyListeners();
+  }
 
   BluetoothProvider() {
     _init();
@@ -58,14 +83,16 @@ class BluetoothProvider extends ChangeNotifier {
 
   /// Initialize Bluetooth
   void _init() {
-    _adapterStateSubscription = FlutterBluePlus.adapterState.listen((state) {
-      _adapterState = state;
-      if (state == BluetoothAdapterState.off) {
-        _isConnected = false;
-        _connectedDevice = null;
-      }
-      notifyListeners();
-    });
+    if (!kIsWeb) {
+      _adapterStateSubscription = FlutterBluePlus.adapterState.listen((state) {
+        _adapterState = state;
+        if (state == BluetoothAdapterState.off) {
+          _isConnected = false;
+          _connectedDevice = null;
+        }
+        _safeNotifyListeners();
+      });
+    }
   }
 
   /// Request Bluetooth permissions
@@ -76,7 +103,7 @@ class BluetoothProvider extends ChangeNotifier {
       return false;
     }
 
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    if (platform.isAndroid) {
       final bluetooth = await Permission.bluetooth.request();
       final bluetoothScan = await Permission.bluetoothScan.request();
       final bluetoothConnect = await Permission.bluetoothConnect.request();
@@ -98,8 +125,7 @@ class BluetoothProvider extends ChangeNotifier {
         debugPrint('Bluetooth is not supported on web');
         return false;
       }
-
-      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      if (platform.isAndroid) {
         await FlutterBluePlus.turnOn();
       }
       return true;
@@ -111,6 +137,11 @@ class BluetoothProvider extends ChangeNotifier {
 
   /// Start scanning for devices
   Future<void> startScan() async {
+    if (kIsWeb) {
+      debugPrint('Bluetooth is not supported on web');
+      _setError('Bluetooth غير مدعوم على المتصفح');
+      return;
+    }
     if (_isScanning) return;
 
     final hasPermissions = await requestPermissions();
@@ -127,7 +158,7 @@ class BluetoothProvider extends ChangeNotifier {
     _isScanning = true;
     _scannedDevices = [];
     _clearError();
-    notifyListeners();
+    _safeNotifyListeners();
 
     try {
       _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
@@ -135,7 +166,7 @@ class BluetoothProvider extends ChangeNotifier {
           if (!_scannedDevices
               .any((d) => d.remoteId == result.device.remoteId)) {
             _scannedDevices.add(result.device);
-            notifyListeners();
+            _safeNotifyListeners();
           }
         }
       });
@@ -150,7 +181,7 @@ class BluetoothProvider extends ChangeNotifier {
     } catch (e) {
       _setError('فشل في البحث عن الأجهزة: $e');
       _isScanning = false;
-      notifyListeners();
+      _safeNotifyListeners();
     }
   }
 
@@ -160,7 +191,7 @@ class BluetoothProvider extends ChangeNotifier {
       await FlutterBluePlus.stopScan();
       await _scanSubscription?.cancel();
       _isScanning = false;
-      notifyListeners();
+      _safeNotifyListeners();
     } catch (e) {
       debugPrint('Error stopping scan: $e');
     }
@@ -168,21 +199,24 @@ class BluetoothProvider extends ChangeNotifier {
 
   /// Connect to a device
   Future<bool> connectToDevice(BluetoothDevice device) async {
+    if (kIsWeb) {
+      debugPrint('Bluetooth is not supported on web');
+      _setError('Bluetooth غير مدعوم على المتصفح');
+      return false;
+    }
     if (_isConnecting) return false;
 
     _isConnecting = true;
     _clearError();
-    notifyListeners();
+    _safeNotifyListeners();
 
     try {
       // Disconnect from any existing device
       await disconnect();
 
       // Connect to the new device
-      await device.connect(
-        autoConnect: false,
-        mtu: null,
-      );
+      // Use the supported connect signature. Remove non-existent params.
+      await device.connect(autoConnect: false);
 
       _connectedDevice = device;
       _lastDeviceId = device.remoteId.str;
@@ -190,7 +224,7 @@ class BluetoothProvider extends ChangeNotifier {
       // Listen to connection state
       _connectionSubscription = device.connectionState.listen((state) {
         _isConnected = state == BluetoothConnectionState.connected;
-        notifyListeners();
+        _safeNotifyListeners();
 
         if (!_isConnected && _lastDeviceId != null) {
           _scheduleReconnect();
@@ -205,19 +239,20 @@ class BluetoothProvider extends ChangeNotifier {
         id: device.remoteId.str,
         name:
             device.platformName.isNotEmpty ? device.platformName : 'SSH-Helmet',
+        userId: _userId,
         macAddress: device.remoteId.str,
         isConnected: true,
         createdAt: DateTime.now(),
       );
 
       _isConnecting = false;
-      notifyListeners();
+      _safeNotifyListeners();
       return true;
     } catch (e) {
       _setError('فشل في الاتصال بالجهاز: $e');
       _isConnecting = false;
       _scheduleReconnect();
-      notifyListeners();
+      _safeNotifyListeners();
       return false;
     }
   }
@@ -258,34 +293,30 @@ class BluetoothProvider extends ChangeNotifier {
       final jsonString = utf8.decode(data);
       final jsonData = jsonDecode(jsonString) as Map<String, dynamic>;
 
-      // Check if this is a system notification from the helmet
-      if (jsonData['type'] == 'notification') {
-        final String title = jsonData['title'] ?? 'Helmet Notification';
-        final String body = jsonData['body'] ?? '';
-
-        NotificationService().showSimpleNotification(
-          title: title,
-          body: body,
-        );
-        return; // Don't process as sensor data
-      }
-
       final sensorData = SensorDataModel.fromJson(
         jsonData,
-        _deviceInfo?.userId ?? 'unknown',
+        _userId ?? _deviceInfo?.userId ?? 'unknown',
       );
 
       _latestData = sensorData;
-      _dataStreamController.add(sensorData);
 
-      // Update device battery level
-      if (_deviceInfo != null) {
-        _deviceInfo = _deviceInfo!.copyWith(
-          batteryLevel: sensorData.batteryLevel,
-        );
+      final now = DateTime.now();
+      final shouldNotify = _lastNotifyTime == null ||
+          now.difference(_lastNotifyTime!) >= const Duration(milliseconds: 150);
+
+      if (shouldNotify) {
+        _lastNotifyTime = now;
+        _dataStreamController.add(sensorData);
+
+        // Update device battery level
+        if (_deviceInfo != null) {
+          _deviceInfo = _deviceInfo!.copyWith(
+            batteryLevel: sensorData.batteryLevel,
+          );
+        }
+
+        _safeNotifyListeners();
       }
-
-      notifyListeners();
     } catch (e) {
       debugPrint('Error processing sensor data: $e');
     }
@@ -305,7 +336,7 @@ class BluetoothProvider extends ChangeNotifier {
       _isConnected = false;
       _deviceInfo = null;
       _reconnectTimer?.cancel();
-      notifyListeners();
+      _safeNotifyListeners();
     } catch (e) {
       debugPrint('Error disconnecting: $e');
     }
@@ -363,7 +394,7 @@ class BluetoothProvider extends ChangeNotifier {
   /// Set error message
   void _setError(String message) {
     _error = message;
-    notifyListeners();
+    _safeNotifyListeners();
   }
 
   @override

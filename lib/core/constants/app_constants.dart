@@ -17,7 +17,8 @@ class AppConstants {
 
   // Bluetooth Constants
   static const String esp32ServiceUuid = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
-  static const String esp32CharacteristicUuid = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
+  static const String esp32CharacteristicUuid =
+      'beb5483e-36e1-4688-b7f5-ea07361b26a8';
   static const String esp32DeviceName = 'SSH-Helmet';
   static const Duration bluetoothScanDuration = Duration(seconds: 10);
   static const Duration bluetoothReconnectDelay = Duration(seconds: 5);
@@ -34,6 +35,11 @@ class AppConstants {
   static const double defaultLatitude = 24.7136;
   static const double defaultLongitude = 46.6753;
   static const double defaultZoom = 15.0;
+
+  // Map configuration
+  // Set your Google Maps API key here for map support in the app.
+  // Leave empty to disable GoogleMap (safe fallback will be used).
+  static const String googleMapsApiKey = '';
 
   // UI Constants
   static const double defaultPadding = 16.0;

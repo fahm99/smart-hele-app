@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../core/constants/app_constants.dart';
@@ -206,8 +205,14 @@ class BluetoothService {
       final jsonString = utf8.decode(data);
       final jsonData = jsonDecode(jsonString) as Map<String, dynamic>;
       _dataStreamController.add(jsonData);
-    } catch (e) {
-      debugPrint('Error processing data: $e');
+    } catch (e, st) {
+      try {
+        final raw = utf8.decode(data);
+        debugPrint('Error processing data (invalid JSON). Raw: $raw Error: $e');
+      } catch (_) {
+        debugPrint('Error processing data and failed to decode raw bytes: $e');
+      }
+      debugPrint(st.toString());
     }
   }
 
@@ -262,8 +267,10 @@ class BluetoothService {
     final devices = await scanForDevices(timeout: const Duration(seconds: 5));
 
     for (final device in devices) {
-      if (device.platformName.contains(AppConstants.esp32DeviceName) ||
-          device.advName.contains(AppConstants.esp32DeviceName)) {
+      final platformName = device.platformName;
+      final advName = device.advName;
+      if (platformName.contains(AppConstants.esp32DeviceName) ||
+          advName.contains(AppConstants.esp32DeviceName)) {
         return device;
       }
     }
