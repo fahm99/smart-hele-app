@@ -4,8 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
-
-
 import 'core/localization/app_localizations.dart';
 import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
@@ -20,8 +18,8 @@ import 'services/notification_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load services in the background so they don't block the screen
-  _initServices();
+  // Initialize services (await so Firebase is ready before app starts)
+  await _initServices();
 
   // Set preferred orientations
   SystemChrome.setPreferredOrientations([

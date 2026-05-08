@@ -60,8 +60,9 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     _scanSubscription = FlutterBluePlus.scanResults.listen((results) async {
       for (var r in results) {
         // ⚠️ غيري الاسم إذا جهازك مختلف
-        final advName = (r.device.advName ?? '');
-        if (!_isConnecting && advName.contains("SSH-Helmet")) {
+        final advName = r.device.advName;
+        if (!_isConnecting &&
+            advName.contains("SSH-Helmet")) {
           _isConnecting = true;
 
           try {

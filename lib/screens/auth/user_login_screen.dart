@@ -37,7 +37,20 @@ class _UserLoginScreenState extends State<UserLoginScreen> {
     );
 
     if (success && mounted) {
-      context.go('/user-home');
+      // انتظر قليلاً لضمان تحديث الحالة
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      // تحقق مرة أخرى من أن بيانات المستخدم محملة
+      if (authProvider.isUserDataLoaded && mounted) {
+        context.go('/user-home');
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('جاري تحميل بيانات المستخدم...'),
+            backgroundColor: AppColors.warning,
+          ),
+        );
+      }
     } else if (mounted && authProvider.error != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

@@ -53,11 +53,24 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
     try {
       final authProvider = context.read<AuthProvider>();
       final bluetoothProvider = context.read<BluetoothProvider>();
+
+      // تحقق من أن المستخدم مسجل الدخول
+      if (!authProvider.isAuthenticated) {
+        throw Exception('يجب تسجيل الدخول أولاً');
+      }
+
+      // تحقق من أن بيانات المستخدم محملة
+      if (!authProvider.isUserDataLoaded) {
+        throw Exception('جاري تحميل بيانات المستخدم، يرجى المحاولة مرة أخرى');
+      }
+
       final user = authProvider.user;
       final sensorData = bluetoothProvider.latestData;
+
       if (user == null) {
-        throw Exception('User not found');
+        throw Exception('لم يتم العثور على بيانات المستخدم');
       }
+
       final report = ReportModel(
         userId: user.id,
         userName: user.name,
@@ -69,7 +82,9 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
         longitude: sensorData?.longitude,
         timestamp: DateTime.now(),
       );
+
       await _firebaseService.createReport(report);
+
       if (!mounted) return;
       // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
@@ -89,9 +104,26 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
       setState(() {
         _isSubmitting = false;
       });
+
+      // رسالة خطأ أكثر وضوحاً
+      String errorMessage = 'فشل إرسال التقرير';
+      if (e.toString().contains('User not found') ||
+          e.toString().contains('لم يتم العثور')) {
+        errorMessage =
+            'لم يتم العثور على بيانات المستخدم. يرجى تسجيل الدخول مرة أخرى';
+      } else if (e.toString().contains('يجب تسجيل الدخول')) {
+        errorMessage = 'يجب تسجيل الدخول أولاً';
+      } else if (e.toString().contains('جاري تحميل')) {
+        errorMessage =
+            'جاري تحميل بيانات المستخدم، يرجى الانتظار قليلاً والمحاولة مرة أخرى';
+      } else {
+        errorMessage =
+            'فشل إرسال التقرير: ${e.toString().replaceAll('Exception: ', '')}';
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('فشل إرسال التقرير: $e'),
+          content: Text(errorMessage),
           backgroundColor: AppColors.error,
           duration: const Duration(seconds: 3),
         ),

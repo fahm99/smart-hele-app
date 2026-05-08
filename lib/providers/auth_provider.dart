@@ -35,8 +35,8 @@ class AuthProvider extends ChangeNotifier {
         await _loadUserData(user.uid);
       } else {
         _user = null;
+        notifyListeners();
       }
-      notifyListeners();
     });
   }
 
@@ -44,8 +44,10 @@ class AuthProvider extends ChangeNotifier {
   Future<void> _loadUserData(String userId) async {
     try {
       _user = await _firebaseService.getUser(userId);
+      notifyListeners(); // إشعار المستمعين بتحديث بيانات المستخدم
     } catch (e) {
       _error = e.toString();
+      notifyListeners();
     }
   }
 
@@ -59,18 +61,27 @@ class AuthProvider extends ChangeNotifier {
         email: email,
         password: password,
       );
-      
+
       if (result.user != null) {
+        // انتظر حتى تكتمل عملية تحميل بيانات المستخدم
         await _loadUserData(result.user!.uid);
-        _setLoading(false);
-        return true;
+
+        // تأكد من أن بيانات المستخدم محملة قبل الإرجاع
+        if (_user != null) {
+          _setLoading(false);
+          return true;
+        } else {
+          _setError('فشل في تحميل بيانات المستخدم');
+          _setLoading(false);
+          return false;
+        }
       }
     } on FirebaseAuthException catch (e) {
       _setError(_getErrorMessage(e));
     } catch (e) {
       _setError(e.toString());
     }
-    
+
     _setLoading(false);
     return false;
   }
@@ -111,6 +122,7 @@ class AuthProvider extends ChangeNotifier {
         await _firebaseService.createUser(newUser);
         _user = newUser;
         _setLoading(false);
+        notifyListeners();
         return true;
       }
     } on FirebaseAuthException catch (e) {
@@ -225,6 +237,9 @@ class AuthProvider extends ChangeNotifier {
     _error = message;
     notifyListeners();
   }
+
+  /// Check if user data is fully loaded
+  bool get isUserDataLoaded => _user != null;
 
   /// Get human-readable error message
   String _getErrorMessage(FirebaseAuthException e) {
