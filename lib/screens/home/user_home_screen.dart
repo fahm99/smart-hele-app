@@ -42,9 +42,11 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     final authProvider = context.read<AuthProvider>();
 
     _dataSubscription = bluetoothProvider.dataStream.listen((data) {
+      final userId =
+          authProvider.user == null ? 'unknown' : authProvider.user!.id;
       sensorDataProvider.initializeStream(
         bluetoothProvider.dataStream,
-        authProvider.user?.id ?? 'unknown',
+        userId,
       );
     });
 
@@ -201,7 +203,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                             ),
                           ),
                           const SizedBox(height: 12),
-                          _buildMap(sensorData),
+                          _buildMap(sensorData, bluetoothProvider.isConnected),
                         ],
                       ),
                     ),
@@ -256,83 +258,101 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     );
   }
 
-  Widget _buildMap(SensorDataModel? sensorData) {
-    final double lat = sensorData?.latitude ?? AppConstants.defaultLatitude;
-    final double lng = sensorData?.longitude ?? AppConstants.defaultLongitude;
-
-    // If Google Maps API key is not provided, show a safe fallback UI
-    if (AppConstants.googleMapsApiKey.isEmpty) {
-      return Container(
-        height: 220,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.black26,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.location_on, size: 48, color: Colors.white70),
-              const SizedBox(height: 8),
-              Text(
-                'GPS: ${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)}',
-                style: const TextStyle(color: Colors.white70),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Live location from helmet sensor',
-                style: TextStyle(color: Colors.white54, fontSize: 12),
-              ),
-            ],
-          ),
-        ),
-      );
+  Widget _buildMap(SensorDataModel? sensorData, bool isHelmetConnected) {
+    // إذا كانت الخوذة غير متصلة، لا نعرض أي بيانات خريطة
+    if (!isHelmetConnected) {
+      return _buildDisconnectedMapPlaceholder();
     }
 
-    // Try to create the GoogleMap widget, but guard against platform/map errors.
-    try {
-      return Container(
-        height: 220,
-        child: GoogleMap(
-          initialCameraPosition: CameraPosition(
-              target: LatLng(lat, lng), zoom: AppConstants.defaultZoom),
-        ),
-      );
-    } catch (e) {
-      // If GoogleMap fails (e.g., missing API key on release), show fallback
-      debugPrint('GoogleMap creation failed: $e');
-      return Container(
-        height: 220,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.black26,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.location_off, size: 48, color: Colors.white70),
-              const SizedBox(height: 8),
-              Text(
-                'Lat: ${lat.toStringAsFixed(6)}',
-                style: const TextStyle(color: Colors.white70),
-              ),
-              Text(
-                'Lng: ${lng.toStringAsFixed(6)}',
-                style: const TextStyle(color: Colors.white70),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Map unavailable — using helmet GPS data',
-                style: TextStyle(color: Colors.white54, fontSize: 12),
-              ),
-            ],
-          ),
-        ),
-      );
+    // إذا كانت الخوذة متصلة لكن لا توجد بيانات، نعرض موقع افتراضي
+    if (sensorData == null ||
+        sensorData.latitude == 0.0 ||
+        sensorData.longitude == 0.0) {
+      return _buildDefaultMap();
     }
+
+    // نعرض الخريطة ببيانات GPS الحقيقية من الخوذة
+    return _buildLiveMap(sensorData);
+  }
+
+  Widget _buildLiveMap(SensorDataModel sensorData) {
+    final LatLng position = LatLng(sensorData.latitude, sensorData.longitude);
+
+    return Container(
+      height: 220,
+      child: GoogleMap(
+        initialCameraPosition: CameraPosition(target: position, zoom: 16),
+        markers: {
+          Marker(
+            markerId: const MarkerId('helmet'),
+            position: position,
+            infoWindow: InfoWindow(
+                title: 'SSH-Helmet',
+                snippet: '${sensorData.latitude}, ${sensorData.longitude}'),
+          ),
+        },
+        onMapCreated: (controller) => _mapController = controller,
+      ),
+    );
+  }
+
+  /// عرض رسالة عند عدم اتصال الخوذة
+  Widget _buildDisconnectedMapPlaceholder() {
+    return Container(
+      height: 220,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade800,
+        borderRadius: BorderRadius.circular(AppConstants.borderRadius),
+        border: Border.all(
+          color: Colors.red.shade300,
+          width: 2,
+        ),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.wifi_off,
+              color: Colors.red.shade300,
+              size: 48,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'لا توجد بيانات - الخوذة غير متصلة',
+              style: TextStyle(
+                color: Colors.red.shade300,
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'يرجى الاتصال بالخوذة الذكية',
+              style: TextStyle(
+                color: Colors.grey.shade400,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// خريطة افتراضية عند عدم توفر بيانات GPS
+  Widget _buildDefaultMap() {
+    final double lat = AppConstants.defaultLatitude;
+    final double lng = AppConstants.defaultLongitude;
+
+    return Container(
+      height: 220,
+      child: GoogleMap(
+        initialCameraPosition:
+            CameraPosition(target: LatLng(lat, lng), zoom: 15),
+      ),
+    );
   }
 
   Widget _buildEmergencyButton(AppLocalizations l10n) {

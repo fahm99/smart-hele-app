@@ -83,12 +83,14 @@ class BluetoothProvider extends ChangeNotifier {
 
   /// Initialize Bluetooth
   void _init() {
+    // Subscribe to adapter state changes (skip on web)
     if (!kIsWeb) {
       _adapterStateSubscription = FlutterBluePlus.adapterState.listen((state) {
         _adapterState = state;
         if (state == BluetoothAdapterState.off) {
           _isConnected = false;
           _connectedDevice = null;
+          _latestData = null; // clear data when bluetooth is turned off
         }
         _safeNotifyListeners();
       });
@@ -224,6 +226,29 @@ class BluetoothProvider extends ChangeNotifier {
       // Listen to connection state
       _connectionSubscription = device.connectionState.listen((state) {
         _isConnected = state == BluetoothConnectionState.connected;
+
+        // If disconnected, clear latest data and emit a cleared payload
+        if (!_isConnected) {
+          _latestData = null;
+          _dataStreamController.add(
+            SensorDataModel(
+              userId: _deviceInfo?.userId ?? 'unknown',
+              heartRate: 0,
+              temperature: 0.0,
+              humidity: 0.0,
+              latitude: 0.0,
+              longitude: 0.0,
+              accX: 0.0,
+              accY: 0.0,
+              accZ: 0.0,
+              shockDetected: false,
+              shockValue: 0,
+              batteryLevel: 0,
+              timestamp: DateTime.now(),
+            ),
+          );
+        }
+
         _safeNotifyListeners();
 
         if (!_isConnected && _lastDeviceId != null) {
@@ -331,6 +356,9 @@ class BluetoothProvider extends ChangeNotifier {
       if (_connectedDevice != null) {
         await _connectedDevice!.disconnect();
       }
+
+      // مسح بيانات الحساسات عند قطع الاتصال
+      _latestData = null;
 
       _connectedDevice = null;
       _isConnected = false;
