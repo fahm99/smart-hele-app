@@ -61,14 +61,21 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
 
       // تحقق من أن بيانات المستخدم محملة
       if (!authProvider.isUserDataLoaded) {
-        throw Exception('جاري تحميل بيانات المستخدم، يرجى المحاولة مرة أخرى');
+        // جرب إعادة تحميل بيانات المستخدم
+        await authProvider.reloadUser();
+
+        if (!authProvider.isUserDataLoaded) {
+          throw Exception(
+              'لم يتم العثور على بيانات المستخدم. يرجى تسجيل الخروج والدخول مرة أخرى');
+        }
       }
 
       final user = authProvider.user;
       final sensorData = bluetoothProvider.latestData;
 
       if (user == null) {
-        throw Exception('لم يتم العثور على بيانات المستخدم');
+        throw Exception(
+            'لم يتم العثور على بيانات المستخدم. يرجى تسجيل الخروج والدخول مرة أخرى');
       }
 
       final report = ReportModel(

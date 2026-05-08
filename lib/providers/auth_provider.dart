@@ -66,12 +66,20 @@ class AuthProvider extends ChangeNotifier {
         // انتظر حتى تكتمل عملية تحميل بيانات المستخدم
         await _loadUserData(result.user!.uid);
 
+        // إذا لم يتم تحميل البيانات، جرب مرة أخرى
+        if (_user == null) {
+          // انتظر إضافياً للتأكد من تحميل البيانات
+          await Future.delayed(const Duration(milliseconds: 500));
+          await _loadUserData(result.user!.uid);
+        }
+
         // تأكد من أن بيانات المستخدم محملة قبل الإرجاع
         if (_user != null) {
           _setLoading(false);
           return true;
         } else {
-          _setError('فشل في تحميل بيانات المستخدم');
+          _setError(
+              'لم يتم العثور على بيانات المستخدم. يرجى التواصل مع المسؤول');
           _setLoading(false);
           return false;
         }
@@ -240,6 +248,13 @@ class AuthProvider extends ChangeNotifier {
 
   /// Check if user data is fully loaded
   bool get isUserDataLoaded => _user != null;
+
+  /// Reload user data from Firestore
+  Future<void> reloadUser() async {
+    if (_firebaseUser != null) {
+      await _loadUserData(_firebaseUser!.uid);
+    }
+  }
 
   /// Get human-readable error message
   String _getErrorMessage(FirebaseAuthException e) {
